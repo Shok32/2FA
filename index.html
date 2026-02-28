@@ -1,1 +1,141 @@
 
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>My OTP Auth</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/otpauth/9.1.2/otpauth.umd.min.js"></script>
+    <style>
+        .token-card { transition: all 0.3s ease; }
+        .progress-ring { transition: stroke-dashoffset 0.5s linear; }
+    </style>
+</head>
+<body class="bg-slate-900 text-white font-sans min-h-screen">
+
+    <div class="max-w-md mx-auto p-4">
+        <header class="flex justify-between items-center mb-8 pt-4">
+            <h1 class="text-2xl font-bold tracking-tight">Authenticator</h1>
+            <button onclick="toggleModal()" class="bg-blue-600 hover:bg-blue-500 p-2 rounded-full shadow-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+            </button>
+        </header>
+
+        <div id="auth-list" class="space-y-4">
+            </div>
+
+        <div id="empty-state" class="hidden text-center mt-20 text-slate-500">
+            <p>У вас пока нет добавленных аккаунтов.</p>
+            <p class="text-sm">Нажмите "+", чтобы добавить первый.</p>
+        </div>
+    </div>
+
+    <div id="modal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-slate-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl">
+            <h2 class="text-xl font-semibold mb-4 text-center">Новый аккаунт</h2>
+            <input id="labelInput" type="text" placeholder="Название (напр. GitHub)" class="w-full bg-slate-700 border-none rounded-lg p-3 mb-3 focus:ring-2 focus:ring-blue-500 outline-none">
+            <input id="secretInput" type="text" placeholder="Секретный ключ (Base32)" class="w-full bg-slate-700 border-none rounded-lg p-3 mb-6 focus:ring-2 focus:ring-blue-500 outline-none uppercase">
+            
+            <div class="flex gap-3">
+                <button onclick="toggleModal()" class="flex-1 py-3 text-slate-400 font-medium">Отмена</button>
+                <button onclick="addToken()" class="flex-1 bg-blue-600 py-3 rounded-lg font-bold">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let accounts = JSON.parse(localStorage.getItem('otp_accounts') || '[]');
+
+        function toggleModal() {
+            const modal = document.getElementById('modal');
+            modal.classList.toggle('hidden');
+        }
+
+        function addToken() {
+            const label = document.getElementById('labelInput').value;
+            const secret = document.getElementById('secretInput').value.replace(/\s/g, '');
+
+            if (label && secret) {
+                accounts.push({ label, secret });
+                localStorage.setItem('otp_accounts', JSON.stringify(accounts));
+                document.getElementById('labelInput').value = '';
+                document.getElementById('secretInput').value = '';
+                toggleModal();
+                render();
+            } else {
+                alert("Заполните все поля!");
+            }
+        }
+
+        function deleteAccount(index) {
+            if (confirm('Удалить этот аккаунт?')) {
+                accounts.splice(index, 1);
+                localStorage.setItem('otp_accounts', JSON.stringify(accounts));
+                render();
+            }
+        }
+
+        function render() {
+            const list = document.getElementById('auth-list');
+            const empty = document.getElementById('empty-state');
+            list.innerHTML = '';
+
+            if (accounts.length === 0) {
+                empty.classList.remove('hidden');
+                return;
+            } else {
+                empty.classList.add('hidden');
+            }
+
+            accounts.forEach((acc, index) => {
+                // Генерируем TOTP код
+                let totp = new OTPAuth.TOTP({
+                    issuer: 'App',
+                    label: acc.label,
+                    algorithm: 'SHA1',
+                    digits: 6,
+                    period: 30,
+                    secret: acc.secret
+                });
+
+                const code = totp.generate();
+                const timeLeft = 30 - (Math.floor(Date.now() / 1000) % 30);
+
+                const card = document.createElement('div');
+                card.className = 'token-card bg-slate-800 rounded-xl p-5 flex justify-between items-center border border-slate-700 shadow-sm';
+                card.innerHTML = `
+                    <div>
+                        <div class="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">${acc.label}</div>
+                        <div class="text-3xl font-mono font-bold tracking-[0.2em] text-blue-400">${code.slice(0, 3)} ${code.slice(3)}</div>
+                    </div>
+                    <div class="flex flex-col items-center gap-2">
+                         <div class="relative flex items-center justify-center">
+                            <svg class="w-8 h-8 transform -rotate-90">
+                                <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="3" fill="transparent" class="text-slate-700" />
+                                <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="3" fill="transparent" 
+                                    class="text-blue-500 progress-ring" 
+                                    stroke-dasharray="88" 
+                                    stroke-dashoffset="${88 - (88 * timeLeft / 30)}" />
+                            </svg>
+                            <span class="absolute text-[10px]">${timeLeft}</span>
+                        </div>
+                        <button onclick="deleteAccount(${index})" class="text-slate-600 hover:text-red-500 transition">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                             </svg>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        // Обновляем коды каждую секунду
+        setInterval(render, 1000);
+        render();
+    </script>
+</body>
+</html>
