@@ -1,72 +1,157 @@
-
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>My OTP Auth</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Authenticator Pro</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Auth Pro">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/otpauth/9.1.2/otpauth.umd.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
     <style>
-        .token-card { transition: all 0.3s ease; }
+        /* Шрифт Apple */
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        .ios-card { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transition: all 0.2s ease-out; }
+        .ios-card:active { transform: scale(0.98); opacity: 0.9; }
         .progress-ring { transition: stroke-dashoffset 0.5s linear; }
+        
+        /* Стилизация сканера */
+        #qr-reader__scan_region video { object-fit: cover !important; border-radius: 12px; }
+        #qr-reader__dashboard { display: none !important; }
+        #qr-reader { border: none !important; }
     </style>
 </head>
-<body class="bg-slate-900 text-white font-sans min-h-screen">
+<body class="bg-[#F2F2F7] text-black">
 
-    <div class="max-w-md mx-auto p-4">
-        <header class="flex justify-between items-center mb-8 pt-4">
-            <h1 class="text-2xl font-bold tracking-tight">Authenticator</h1>
-            <button onclick="toggleModal()" class="bg-blue-600 hover:bg-blue-500 p-2 rounded-full shadow-lg">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
-            </button>
+    <div class="max-w-md mx-auto p-4 pt-10">
+        <header class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-extrabold tracking-tight">Authenticator</h1>
+            <div class="flex gap-2">
+                <button onclick="toggleAddMenu()" class="text-blue-600 bg-white p-2 rounded-full shadow-sm ios-card">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+                    </svg>
+                </button>
+            </div>
         </header>
 
-        <div id="auth-list" class="space-y-4">
+        <div id="auth-list" class="space-y-3">
             </div>
 
-        <div id="empty-state" class="hidden text-center mt-20 text-slate-500">
-            <p>У вас пока нет добавленных аккаунтов.</p>
-            <p class="text-sm">Нажмите "+", чтобы добавить первый.</p>
+        <div id="empty-state" class="hidden text-center mt-20 text-[#8E8E93]">
+            <p>У вас пока нет аккаунтов.</p>
+            <p class="text-sm">Нажмите "+", чтобы добавить.</p>
         </div>
     </div>
 
-    <div id="modal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center p-4 z-50">
-        <div class="bg-slate-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl">
-            <h2 class="text-xl font-semibold mb-4 text-center">Новый аккаунт</h2>
-            <input id="labelInput" type="text" placeholder="Название (напр. GitHub)" class="w-full bg-slate-700 border-none rounded-lg p-3 mb-3 focus:ring-2 focus:ring-blue-500 outline-none">
-            <input id="secretInput" type="text" placeholder="Секретный ключ (Base32)" class="w-full bg-slate-700 border-none rounded-lg p-3 mb-6 focus:ring-2 focus:ring-blue-500 outline-none uppercase">
+    <div id="add-menu" class="fixed inset-0 bg-black/40 z-50 hidden transition-opacity duration-300 opacity-0" onclick="toggleAddMenu()">
+        <div class="absolute bottom-0 left-0 right-0 bg-[#F2F2F7] rounded-t-2xl p-6 pb-10 transform translate-y-full transition-transform duration-300 shadow-2xl" onclick="event.stopPropagation()">
+            <div class="w-10 h-1 bg-slate-300 rounded-full mx-auto mb-5"></div>
+            <button onclick="startQRScanner()" class="w-full text-left bg-white p-4 rounded-xl flex items-center gap-4 mb-3 ios-card shadow-sm">
+                <div class="bg-blue-100 text-blue-600 p-3 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1.5M8 4v6m4-6v6m0 0H8m4 0h4m-4 6v1.5M8 20v-6m4 6v-6m0 0H8m4 0h4m0-6v6m-4-6V4" /></svg></div>
+                <div><div class="font-semibold text-lg">Сканировать QR-код</div><div class="text-sm text-[#8E8E93]">Автоматическая настройка сервиса</div></div>
+            </button>
+            <button onclick="openManualModal()" class="w-full text-left bg-white p-4 rounded-xl flex items-center gap-4 ios-card shadow-sm">
+                <div class="bg-slate-100 text-slate-600 p-3 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg></div>
+                <div><div class="font-semibold text-lg">Ввести вручную</div><div class="text-sm text-[#8E8E93]">Для сервисов без QR-кода</div></div>
+            </button>
+        </div>
+    </div>
+
+    <div id="qr-modal" class="fixed inset-0 bg-black/80 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-2xl overflow-hidden relative shadow-2xl">
+            <div id="qr-reader"></div>
+            <div class="p-4 text-center">
+                <p class="text-sm text-[#8E8E93] mb-4">Наведите камеру на QR-код, предоставленный сервисом</p>
+                <button onclick="stopQRScanner()" class="w-full bg-[#E5E5EA] text-black py-3 rounded-xl font-semibold ios-card">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="manual-modal" class="fixed inset-0 bg-black/40 hidden z-50 flex items-center justify-center p-4" onclick="closeManualModal()">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl" onclick="event.stopPropagation()">
+            <h2 class="text-xl font-bold mb-5 text-center">Новый аккаунт</h2>
+            <input id="labelInput" type="text" placeholder="Название (напр. GitHub)" class="w-full bg-[#F2F2F7] rounded-xl p-4 mb-3 focus:ring-2 focus:ring-blue-500 outline-none">
+            <input id="secretInput" type="text" placeholder="Секретный ключ" class="w-full bg-[#F2F2F7] rounded-xl p-4 mb-6 focus:ring-2 focus:ring-blue-500 outline-none uppercase font-mono">
             
             <div class="flex gap-3">
-                <button onclick="toggleModal()" class="flex-1 py-3 text-slate-400 font-medium">Отмена</button>
-                <button onclick="addToken()" class="flex-1 bg-blue-600 py-3 rounded-lg font-bold">Сохранить</button>
+                <button onclick="closeManualModal()" class="flex-1 py-3 text-blue-600 font-medium ios-card">Отмена</button>
+                <button onclick="addTokenManual()" class="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold ios-card">Сохранить</button>
             </div>
         </div>
     </div>
 
     <script>
         let accounts = JSON.parse(localStorage.getItem('otp_accounts') || '[]');
+        let html5QrcodeScanner = null;
 
-        function toggleModal() {
-            const modal = document.getElementById('modal');
-            modal.classList.toggle('hidden');
+        // UI Controls
+        function toggleAddMenu() {
+            const menu = document.getElementById('add-menu');
+            const inner = menu.querySelector('div');
+            if (menu.classList.contains('hidden')) {
+                menu.classList.remove('hidden');
+                setTimeout(() => { menu.classList.add('opacity-100'); inner.classList.add('translate-y-0'); }, 10);
+            } else {
+                menu.classList.remove('opacity-100'); inner.classList.remove('translate-y-0');
+                setTimeout(() => menu.classList.add('hidden'), 300);
+            }
         }
 
-        function addToken() {
-            const label = document.getElementById('labelInput').value;
-            const secret = document.getElementById('secretInput').value.replace(/\s/g, '');
+        function openManualModal() { toggleAddMenu(); document.getElementById('manual-modal').classList.remove('hidden'); }
+        function closeManualModal() { document.getElementById('manual-modal').classList.add('hidden'); }
 
+        // Logic
+        function addAccount(label, secret) {
             if (label && secret) {
-                accounts.push({ label, secret });
+                accounts.push({ label, secret: secret.replace(/\s/g, '') });
                 localStorage.setItem('otp_accounts', JSON.stringify(accounts));
-                document.getElementById('labelInput').value = '';
-                document.getElementById('secretInput').value = '';
-                toggleModal();
                 render();
-            } else {
-                alert("Заполните все поля!");
+                return true;
+            }
+            alert("Заполните все поля!"); return false;
+        }
+
+        function addTokenManual() {
+            if(addAccount(document.getElementById('labelInput').value, document.getElementById('secretInput').value)) {
+                closeManualModal();
+                document.getElementById('labelInput').value = ''; document.getElementById('secretInput').value = '';
+            }
+        }
+
+        // QR Scanner Logic
+        function startQRScanner() {
+            toggleAddMenu();
+            document.getElementById('qr-modal').classList.remove('hidden');
+            html5QrcodeScanner = new Html5Qrcode("qr-reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess);
+        }
+
+        function stopQRScanner() {
+            if (html5QrcodeScanner) {
+                html5QrcodeScanner.stop().then(() => {
+                    document.getElementById('qr-modal').classList.add('hidden');
+                    html5QrcodeScanner = null;
+                });
+            }
+        }
+
+        function onScanSuccess(decodedText) {
+            try {
+                // Парсим URI (otpauth://totp/GitHub:user?secret=...)
+                let totp = OTPAuth.URI.parse(decodedText);
+                if (totp && totp.secret) {
+                    addAccount(totp.label || totp.issuer, totp.secret.base32);
+                    stopQRScanner();
+                }
+            } catch (e) {
+                alert("Ошибка: Это не валидный QR-код аутентификатора.");
             }
         }
 
@@ -78,62 +163,64 @@
             }
         }
 
+        // Иконки для популярных сервисов
+        const serviceIcons = {
+            'github': '<svg class="w-8 h-8 rounded-lg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>',
+            'google': '<img src="https://www.google.com/images/branding/product/2x/googleg_16dp.png" class="w-7 h-7">',
+            'default': '<div class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-xl">?</div>'
+        };
+
         function render() {
             const list = document.getElementById('auth-list');
             const empty = document.getElementById('empty-state');
             list.innerHTML = '';
 
             if (accounts.length === 0) {
-                empty.classList.remove('hidden');
-                return;
+                empty.classList.remove('hidden'); return;
             } else {
                 empty.classList.add('hidden');
             }
 
             accounts.forEach((acc, index) => {
-                // Генерируем TOTP код
-                let totp = new OTPAuth.TOTP({
-                    issuer: 'App',
-                    label: acc.label,
-                    algorithm: 'SHA1',
-                    digits: 6,
-                    period: 30,
-                    secret: acc.secret
-                });
-
+                let totp = new OTPAuth.TOTP({ secret: acc.secret, digits: 6, period: 30 });
                 const code = totp.generate();
                 const timeLeft = 30 - (Math.floor(Date.now() / 1000) % 30);
+                
+                // Определяем иконку
+                const lowerLabel = acc.label.toLowerCase();
+                let iconHtml = serviceIcons['default'];
+                for (let key in serviceIcons) {
+                    if (lowerLabel.includes(key)) { iconHtml = serviceIcons[key]; break; }
+                }
 
                 const card = document.createElement('div');
-                card.className = 'token-card bg-slate-800 rounded-xl p-5 flex justify-between items-center border border-slate-700 shadow-sm';
+                card.className = 'bg-white rounded-2xl p-5 ios-card shadow-sm flex justify-between items-center relative';
                 card.innerHTML = `
-                    <div>
-                        <div class="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">${acc.label}</div>
-                        <div class="text-3xl font-mono font-bold tracking-[0.2em] text-blue-400">${code.slice(0, 3)} ${code.slice(3)}</div>
-                    </div>
-                    <div class="flex flex-col items-center gap-2">
-                         <div class="relative flex items-center justify-center">
-                            <svg class="w-8 h-8 transform -rotate-90">
-                                <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="3" fill="transparent" class="text-slate-700" />
-                                <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="3" fill="transparent" 
-                                    class="text-blue-500 progress-ring" 
-                                    stroke-dasharray="88" 
-                                    stroke-dashoffset="${88 - (88 * timeLeft / 30)}" />
-                            </svg>
-                            <span class="absolute text-[10px]">${timeLeft}</span>
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 flex items-center justify-center text-slate-900">${iconHtml}</div>
+                        <div>
+                            <div class="text-[#8E8E93] text-xs font-semibold uppercase tracking-wider mb-1">${acc.label}</div>
+                            <div class="text-4xl font-mono font-bold tracking-[0.15em] text-blue-600">${code.slice(0, 3)} ${code.slice(3)}</div>
                         </div>
-                        <button onclick="deleteAccount(${index})" class="text-slate-600 hover:text-red-500 transition">
-                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                             </svg>
-                        </button>
                     </div>
+                    <div class="relative flex items-center justify-center">
+                        <svg class="w-8 h-8 transform -rotate-90">
+                            <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="3" fill="transparent" class="text-[#E5E5EA]" />
+                            <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="3" fill="transparent" 
+                                class="text-blue-500 progress-ring" 
+                                stroke-dasharray="88" 
+                                stroke-dashoffset="${88 - (88 * timeLeft / 30)}" />
+                        </svg>
+                        <span class="absolute text-[10px] text-blue-600 font-bold">${timeLeft}</span>
+                    </div>
+                    <button onclick="deleteAccount(${index})" class="absolute -top-2 -right-2 bg-red-100 text-red-600 rounded-full p-1 opacity-20 hover:opacity-100 transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                    </button>
                 `;
                 list.appendChild(card);
             });
         }
 
-        // Обновляем коды каждую секунду
         setInterval(render, 1000);
         render();
     </script>
